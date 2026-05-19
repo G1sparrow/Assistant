@@ -1,0 +1,32 @@
+/docs/流程.md
+# Compiled output
+/target/
+/out/
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.vscode/
+
+# Log files
+*.log
+
+# Database files
+*.mv.db
+*.trace.db
+*.lock.db
+/data/
+*.db
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Application specific
+application-local.yml
+application-dev.yml

@@ -1,0 +1,112 @@
+server:
+  port: 8081
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: desktop-assistant
+
+  datasource:
+    url: jdbc:h2:file:./data/assistant-db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    open-in-view: false
+
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+# ============================================================
+# LLM 模型配置
+# ============================================================
+assistant:
+  # 默认使用的模型类型: ollama / deepseek
+  default-model: ollama
+
+  ollama:
+    base-url: http://localhost:11434
+    model-name: qwen3:8b
+    temperature: 0.7
+    top-p: 0.9
+    max-tokens: 4096
+    # 用于 Embedding 的模型
+    embedding-model-name: nomic-embed-text
+
+  deepseek:
+    base-url: https://api.deepseek.com/v1
+    api-key: ${DEEPSEEK_API_KEY:sk-your-deepseek-api-key}
+    model-name: deepseek-chat
+    temperature: 0.7
+    top-p: 0.9
+    max-tokens: 4096
+
+  # MCP 服务器配置 (可扩展)
+  mcp:
+    enabled: true
+    servers:
+      - name: filesystem
+        transport: stdio
+        command: npx
+        args:
+          - -y
+          - "@modelcontextprotocol/server-filesystem"
+          - "${user.home}/.assistant"
+
+  # RAG 配置
+  rag:
+    enabled: true
+    max-results: 5
+    min-score: 0.6
+    document-dir: E:/project/assistant/data/documents
+
+  # Agent 配置
+  agent:
+    system-prompt: |
+      你是一个智能桌面助手，名为"小智"。
+      你的职责是协助用户完成日常任务、回答问题、提供信息和建议。
+      请使用友好、专业的语气进行交流。
+      你可以调用工具来获取实时信息、操作文件等。
+      如果你需要获取额外信息来回答问题，请使用RAG检索知识库。
+    memory:
+      # 消息历史保留条数
+      max-messages: 50
+      # 对话摘要启用
+      summary-enabled: true
+
+logging:
+  level:
+    com.assistant: DEBUG
+    dev.langchain4j: INFO
+    org.springframework: WARN
