@@ -1,5 +1,6 @@
 package com.assistant.controller;
 
+import com.assistant.config.AssistantProperties;
 import com.assistant.entity.ChatMessage;
 import com.assistant.entity.Conversation;
 import com.assistant.service.ChatService;
@@ -8,37 +9,25 @@ import com.assistant.mcp.McpConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 聊天控制器 - 提供 Web 页面和 REST API
+ * 聊天控制器 - 提供 REST API
  */
 @Slf4j
-@Controller
+@RestController
 @RequiredArgsConstructor
 public class ChatController {
 
     private final ChatService chatService;
     private final RagService ragService;
     private final McpConfig mcpConfig;
-
-    // ===================== 页面路由 =====================
-
-    /**
-     * 主页 - 聊天界面
-     */
-    @GetMapping("/")
-    public String index(Model model) {
-        List<Conversation> conversations = chatService.getConversations();
-        model.addAttribute("conversations", conversations);
-        return "chat";
-    }
+    private final AssistantProperties properties;
 
     // ===================== REST API =====================
 
@@ -92,6 +81,22 @@ public class ChatController {
     }
 
     /**
+     * 发送聊天消息 (流式 SSE)
+     */
+    @PostMapping("/api/chat/stream")
+    public SseEmitter streamChat(
+            @RequestParam Long conversationId,
+            @RequestParam String message) {
+
+        log.info("收到流式请求: conversationId={}", conversationId);
+        SseEmitter emitter = new SseEmitter(120_000L);
+
+        chatService.streamChat(conversationId, message, emitter);
+
+        return emitter;
+    }
+
+    /**
      * 删除对话
      */
     @DeleteMapping("/api/conversations/{conversationId}")
@@ -122,8 +127,38 @@ public class ChatController {
     public ResponseEntity<Map<String, Object>> status() {
         Map<String, Object> info = new HashMap<>();
         info.put("conversations", chatService.getConversations().size());
+        info.put("model", properties.getDefaultModel());
         info.put("rag", ragService.getStats());
         info.put("mcp", mcpConfig.getConnectedServers());
         return ResponseEntity.ok(info);
+    }
+
+    /**
+     * 上传文档到知识库
+     */
+    @PostMapping("/api/documents/upload")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> uploadDocument(
+            @RequestParam("file") MultipartFile file) {
+        log.info("上传文档: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
+
+        if (file.isEmpty()) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "上传文件为空");
+            return ResponseEntity.badRequest().body(err);
+        }
+
+        try {
+            Map<String, Object> result = ragService.ingestFile(
+                    file.getOriginalFilename(), file.getBytes());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("文档上传处理失败", e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "上传失败: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(err);
+        }
     }
 }

@@ -2,15 +2,19 @@ package com.assistant.service;
 
 import com.assistant.config.AssistantProperties;
 import com.assistant.config.LangChain4jConfig;
+import com.assistant.config.LangChain4jConfig.StreamingAssistantAiService;
 import com.assistant.entity.ChatMessage;
 import com.assistant.entity.Conversation;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 聊天服务 - 桌面助手的核心业务逻辑
@@ -22,16 +26,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatService {
 
     private final LangChain4jConfig.AssistantAiService aiService;
+    private final StreamingAssistantAiService streamingAiService;
     private final MemoryService memoryService;
     private final AssistantProperties properties;
-
-    // 存储 SSE 流式会话 (conversationId -> SseEmitter)
-    private final Map<Long, List<Object>> streamingSessions = new ConcurrentHashMap<>();
 
     /**
      * 发送消息并获取回复 (非流式)
      */
     public ChatResponse chat(Long conversationId, String userMessage) {
+        log.info("===== 用户输入 [conversationId={}] =====", conversationId);
+        log.info("{}", userMessage);
+
         // 1. 保存用户消息
         memoryService.saveUserMessage(conversationId, userMessage);
 
@@ -40,13 +45,13 @@ public class ChatService {
 
         try {
             // 3. 调用 AI 模型
-            log.debug("调用 AI 模型, conversationId={}, message={}", conversationId,
-                    userMessage.substring(0, Math.min(50, userMessage.length())));
-
             String response = aiService.chat(conversationId, userMessage, systemPrompt);
 
             // 4. 保存助手回复
             memoryService.saveAssistantMessage(conversationId, response);
+
+            log.info("===== AI 回复 [conversationId={}] =====", conversationId);
+            log.info("{}", response);
 
             // 5. 如果启用对话摘要，异步更新
             if (properties.getAgent().getMemory().isSummaryEnabled()) {
@@ -65,6 +70,75 @@ public class ChatService {
                     .message("抱歉，我遇到了一些问题: " + e.getMessage())
                     .error(true)
                     .build();
+        }
+    }
+    /**
+     * 发送消息并获取流式回复 (SSE)
+     */
+    public void streamChat(Long conversationId, String userMessage, SseEmitter emitter) {
+        log.info("===== 用户输入 [conversationId={}] =====", conversationId);
+        log.info("{}", userMessage);
+
+        memoryService.saveUserMessage(conversationId, userMessage);
+        String systemPrompt = buildSystemPrompt(conversationId);
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            StringBuilder fullResponse = new StringBuilder();
+
+            streamingAiService.chat(conversationId, userMessage, systemPrompt)
+                    .onPartialResponse(token -> {
+                        fullResponse.append(token);
+                        try {
+                            emitter.send(SseEmitter.event().name("token").data(token));
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    })
+                    .onToolExecuted(toolExec -> {
+                        try {
+                            Map<String, Object> info = new LinkedHashMap<>();
+                            info.put("name", toolExec.request().name());
+                            info.put("arguments", toolExec.request().arguments());
+                            info.put("result", toolExec.result());
+                            emitter.send(SseEmitter.event().name("tool_call").data(mapper.writeValueAsString(info)));
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    })
+                    .onCompleteResponse(response -> {
+                        String reply = fullResponse.toString();
+                        memoryService.saveAssistantMessage(conversationId, reply);
+                        log.info("===== AI 回复 [conversationId={}] =====", conversationId);
+                        log.info("{}", reply);
+                        if (properties.getAgent().getMemory().isSummaryEnabled()) {
+                            updateSummaryAsync(conversationId);
+                        }
+                        try {
+                            emitter.send(SseEmitter.event().name("done").data(conversationId));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            log.error("SSE complete send failed", e);
+                        }
+                    })
+                    .onError(error -> {
+                        log.error("Streaming AI 调用失败", error);
+                        try {
+                            emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            log.error("SSE error send failed", e);
+                        }
+                    })
+                    .start();
+        } catch (Exception e) {
+            log.error("启动流式 AI 失败", e);
+            try {
+                emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+            } catch (IOException ex) {
+                log.error("SSE send failed", ex);
+            }
+            emitter.completeWithError(e);
         }
     }
 

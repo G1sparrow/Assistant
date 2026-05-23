@@ -1,6 +1,6 @@
 /docs/流程.md
 # Compiled output
-/target/
+target/
 /out/
 
 # IDE files
@@ -30,3 +30,9 @@ Thumbs.db
 # Application specific
 application-local.yml
 application-dev.yml
+/frontend/node_modules/
+/frontend/dist/
+/v1.0.1.md
+/AGENTS.md
+/.trae/
+/docs/

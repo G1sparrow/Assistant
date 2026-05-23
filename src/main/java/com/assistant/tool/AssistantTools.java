@@ -58,7 +58,7 @@ public class AssistantTools {
     /**
      * RAG 知识库检索工具
      */
-    @Tool("在本地知识库中搜索相关信息，当需要查阅本地文档时使用此工具")
+    @Tool("搜索本地知识库文档中的内容。仅当用户明确询问本地文档/知识库中的信息时才使用，通用知识问题请直接回答")
     public String searchKnowledgeBase(@P("搜索关键词") String query) {
         log.debug("Tool: searchKnowledgeBase -> {}", query);
         return ragService.search(query);

@@ -31,13 +31,6 @@ spring:
         format_sql: true
     open-in-view: false
 
-  thymeleaf:
-    cache: false
-    prefix: classpath:/templates/
-    suffix: .html
-    mode: HTML
-    encoding: UTF-8
-
   servlet:
     multipart:
       enabled: true
