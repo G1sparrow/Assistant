@@ -37,23 +37,21 @@ public class ChatService {
         log.info("===== 用户输入 [conversationId={}] =====", conversationId);
         log.info("{}", userMessage);
 
-        // 1. 保存用户消息
-        memoryService.saveUserMessage(conversationId, userMessage);
-
-        // 2. 获取对话历史上下文
+        // 1. 构建包含完整对话历史的 system prompt
         String systemPrompt = buildSystemPrompt(conversationId);
 
         try {
-            // 3. 调用 AI 模型
-            String response = aiService.chat(conversationId, userMessage, systemPrompt);
+            // 2. 调用 AI 模型（不再依赖 LangChain4j ChatMemory）
+            String response = aiService.chat(userMessage, systemPrompt);
 
-            // 4. 保存助手回复
+            // 3. 统一保存用户消息 + AI 回复到 DB
+            memoryService.saveUserMessage(conversationId, userMessage);
             memoryService.saveAssistantMessage(conversationId, response);
 
             log.info("===== AI 回复 [conversationId={}] =====", conversationId);
             log.info("{}", response);
 
-            // 5. 如果启用对话摘要，异步更新
+            // 4. 如果启用对话摘要，异步更新
             if (properties.getAgent().getMemory().isSummaryEnabled()) {
                 updateSummaryAsync(conversationId);
             }
@@ -79,14 +77,13 @@ public class ChatService {
         log.info("===== 用户输入 [conversationId={}] =====", conversationId);
         log.info("{}", userMessage);
 
-        memoryService.saveUserMessage(conversationId, userMessage);
         String systemPrompt = buildSystemPrompt(conversationId);
 
         try {
             ObjectMapper mapper = new ObjectMapper();
             StringBuilder fullResponse = new StringBuilder();
 
-            streamingAiService.chat(conversationId, userMessage, systemPrompt)
+            streamingAiService.chat(userMessage, systemPrompt)
                     .onPartialResponse(token -> {
                         fullResponse.append(token);
                         try {
@@ -108,6 +105,7 @@ public class ChatService {
                     })
                     .onCompleteResponse(response -> {
                         String reply = fullResponse.toString();
+                        memoryService.saveUserMessage(conversationId, userMessage);
                         memoryService.saveAssistantMessage(conversationId, reply);
                         log.info("===== AI 回复 [conversationId={}] =====", conversationId);
                         log.info("{}", reply);
@@ -172,21 +170,40 @@ public class ChatService {
     }
 
     /**
-     * 构建系统提示词
+     * 构建系统提示词（含完整对话历史 + 摘要）
      */
     private String buildSystemPrompt(Long conversationId) {
         String basePrompt = properties.getAgent().getSystemPrompt();
-
         StringBuilder prompt = new StringBuilder(basePrompt);
 
-        // 附加对话历史摘要 (如果有)
+        // 1. 从 DB 加载对话历史（跳过 TOOL 等非对话消息）
+        List<ChatMessage> messages = memoryService.getConversationMessages(conversationId);
+        int maxHistory = properties.getAgent().getMemory().getMaxHistoryMessages();
+        if (messages != null && !messages.isEmpty()) {
+            prompt.append("\n\n===== 对话历史 =====\n");
+            int start = Math.max(0, messages.size() - maxHistory);
+            for (int i = start; i < messages.size(); i++) {
+                ChatMessage msg = messages.get(i);
+                String role;
+                if ("USER".equals(msg.getRole())) {
+                    role = "用户";
+                } else if ("ASSISTANT".equals(msg.getRole())) {
+                    role = "助手";
+                } else {
+                    continue;
+                }
+                prompt.append(role).append(": ").append(msg.getContent()).append("\n");
+            }
+        }
+
+        // 2. 附加对话摘要（如果启用）
         memoryService.getConversation(conversationId).ifPresent(conv -> {
             if (conv.getSummary() != null && !conv.getSummary().isBlank()) {
-                prompt.append("\n\n===== 对话历史摘要 =====\n");
+                prompt.append("\n===== 对话摘要 =====\n");
                 prompt.append(conv.getSummary());
             }
         });
-
+        log.info("上下文内容拼接后的提示词:"+ prompt);
         return prompt.toString();
     }
 

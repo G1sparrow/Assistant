@@ -425,10 +425,12 @@ html, body {
 
 .msg-markdown {
   line-height: 1.7;
-  white-space: normal;
+  white-space: pre-wrap;
 }
 
 .msg-markdown p { margin-bottom: 8px; }
+.msg-markdown p:empty { display: none; }
+.msg-markdown br { display: block; content: ''; margin: 4px 0; }
 .msg-markdown p:last-child { margin-bottom: 0; }
 .msg-markdown ul, .msg-markdown ol { margin: 6px 0; padding-left: 22px; }
 .msg-markdown li { margin-bottom: 3px; }

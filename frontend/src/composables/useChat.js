@@ -44,9 +44,11 @@ export function useChat() {
         if (fullText === token) {
           pushMessage('ASSISTANT', '')
         }
-        messages.value[messages.value.length - 1].content = fullText
-        // force reactivity
-        messages.value = [...messages.value]
+        // 创建新对象引用，强制 Vue 检测到 prop 变化并重渲染子组件
+        const msgs = [...messages.value]
+        const last = msgs[msgs.length - 1]
+        msgs[msgs.length - 1] = { ...last, content: fullText }
+        messages.value = msgs
       },
       onToolCall(data) {
         try {

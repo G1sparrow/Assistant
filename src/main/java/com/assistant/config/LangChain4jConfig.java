@@ -1,9 +1,6 @@
 package com.assistant.config;
 
-import com.assistant.service.MemoryService;
 import com.assistant.tool.AssistantTools;
-import dev.langchain4j.memory.chat.ChatMemoryProvider;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -12,7 +9,6 @@ import dev.langchain4j.model.ollama.OllamaStreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.service.AiServices;
-import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
@@ -116,12 +112,13 @@ public class LangChain4jConfig {
 
     /**
      * AI 助手服务接口 - LangChain4j AI Service 模式
+     * 注意：不再使用 @MemoryId + ChatMemoryProvider，
+     * 对话历史由 ChatService 从 DB 加载显式放入 system prompt
      */
     public interface AssistantAiService {
 
         @SystemMessage("{{systemPrompt}}")
-        String chat(@MemoryId Long conversationId,
-                    @UserMessage String userMessage,
+        String chat(@UserMessage String userMessage,
                     @V("systemPrompt") String systemPrompt);
     }
 
@@ -131,8 +128,7 @@ public class LangChain4jConfig {
     public interface StreamingAssistantAiService {
 
         @SystemMessage("{{systemPrompt}}")
-        TokenStream chat(@MemoryId Long conversationId,
-                         @UserMessage String userMessage,
+        TokenStream chat(@UserMessage String userMessage,
                          @V("systemPrompt") String systemPrompt);
     }
 
@@ -142,18 +138,9 @@ public class LangChain4jConfig {
     @Primary
     public AssistantAiService assistantAiService(
             ChatModel chatModel,
-            MemoryService memoryService,
             AssistantTools tools) {
-
-        ChatMemoryProvider chatMemoryProvider = chatId ->
-                MessageWindowChatMemory.builder()
-                        .id(chatId)
-                        .maxMessages(properties.getAgent().getMemory().getMaxMessages())
-                        .build();
-
         return AiServices.builder(AssistantAiService.class)
                 .chatModel(chatModel)
-                .chatMemoryProvider(chatMemoryProvider)
                 .tools(tools)
                 .build();
     }
@@ -161,18 +148,9 @@ public class LangChain4jConfig {
     @Bean
     public StreamingAssistantAiService streamingAssistantAiService(
             StreamingChatModel streamingChatModel,
-            MemoryService memoryService,
             AssistantTools tools) {
-
-        ChatMemoryProvider chatMemoryProvider = chatId ->
-                MessageWindowChatMemory.builder()
-                        .id(chatId)
-                        .maxMessages(properties.getAgent().getMemory().getMaxMessages())
-                        .build();
-
         return AiServices.builder(StreamingAssistantAiService.class)
                 .streamingChatModel(streamingChatModel)
-                .chatMemoryProvider(chatMemoryProvider)
                 .tools(tools)
                 .build();
     }

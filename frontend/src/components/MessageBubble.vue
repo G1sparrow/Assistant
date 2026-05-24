@@ -22,15 +22,12 @@ const props = defineProps({
   message: { type: Object, required: true }
 })
 
-marked.setOptions({ breaks: true, gfm: true })
-
 const isUser = computed(() => props.message.role === 'USER')
 const isStreaming = computed(() => !isUser.value && props.message.content === '')
 
 const rendered = computed(() => {
   if (!props.message.content) return ''
-  const html = marked.parse(props.message.content)
-  // highlight code blocks after render
+  const html = marked.parse(props.message.content, { breaks: true, gfm: true })
   const div = document.createElement('div')
   div.innerHTML = html
   div.querySelectorAll('pre code').forEach(block => {

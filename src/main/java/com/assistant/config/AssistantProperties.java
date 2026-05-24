@@ -73,5 +73,6 @@ public class AssistantProperties {
     public static class Memory {
         private int maxMessages;
         private boolean summaryEnabled;
+        private int maxHistoryMessages;
     }
 }

@@ -93,8 +93,10 @@ assistant:
       你可以调用工具来获取实时信息、操作文件等。
       如果你需要获取额外信息来回答问题，请使用RAG检索知识库。
     memory:
-      # 消息历史保留条数
+      # LangChain4j 进程内记忆保留条数
       max-messages: 50
+      # 每次请求携带的历史消息最大条数
+      max-history-messages: 50
       # 对话摘要启用
       summary-enabled: true
 
