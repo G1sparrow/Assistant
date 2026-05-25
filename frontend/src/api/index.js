@@ -27,6 +27,15 @@ export function deleteConversation(conversationId) {
   return request(`/conversations/${conversationId}`, { method: 'DELETE' })
 }
 
+export function updateConversationModel(conversationId, modelType) {
+  const params = new URLSearchParams({ modelType })
+  return request(`/conversations/${conversationId}/model`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  })
+}
+
 export function sendMessage(conversationId, text) {
   const params = new URLSearchParams({ conversationId, message: text })
   return request('/chat', {
@@ -49,6 +58,57 @@ export async function uploadDocument(file) {
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
+}
+
+// ============ Review ============
+
+export async function uploadNote(content, modelType) {
+  const params = new URLSearchParams({ content, model: modelType || 'ollama' })
+  const res = await fetch(BASE + '/review/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function uploadNoteFile(file, modelType) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('model', modelType || 'ollama')
+  const res = await fetch(BASE + '/review/upload', {
+    method: 'POST',
+    body: formData
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function gradeAnswers(noteId, answers, modelType) {
+  const res = await fetch(BASE + '/review/grade?noteId=' + noteId + '&model=' + (modelType || 'ollama'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers })
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export function listNotes() {
+  return request('/review/notes')
+}
+
+export function getNoteDetail(noteId) {
+  return request(`/review/notes/${noteId}`)
+}
+
+export function saveMessage(conversationId, role, content) {
+  return request(`/review/${conversationId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, content })
+  })
 }
 
 export async function streamChat(conversationId, text, callbacks) {

@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习资料库 - 笔记 · 复习题 · 答题记录</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 主布局 */
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* ========== 侧边栏 ========== */
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+        }
+
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.5rem;
+            color: #1a1a2e;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-header p {
+            color: #6c7a8e;
+            font-size: 0.8rem;
+            margin-top: 8px;
+        }
+
+        /* 搜索框 */
+        .search-box {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            background: #f8f9fa;
+            transition: all 0.2s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+        }
+
+        /* 文件类型 Tab */
+        .file-tabs {
+            display: flex;
+            padding: 12px 20px;
+            gap: 12px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .file-tab {
+            flex: 1;
+            padding: 8px 0;
+            background: none;
+            border: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 20px;
+            transition: all 0.2s;
+            color: #6c7a8e;
+        }
+
+        .file-tab.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        /* 文件列表 */
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+        }
+
+        .file-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .file-item:hover {
+            background: #f0f0ff;
+            transform: translateX(2px);
+        }
+
+        .file-item.selected {
+            background: linear-gradient(135deg, #f0f0ff, #faf0ff);
+            border-color: #667eea;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: #1a1a2e;
+            font-size: 0.9rem;
+            word-break: break-all;
+            margin-bottom: 6px;
+        }
+
+        .file-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #6c7a8e;
+        }
+
+        .file-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.65rem;
+            font-weight: 500;
+        }
+
+        .badge-note { background: #e3f2fd; color: #1976d2; }
+        .badge-quiz { background: #fff3e0; color: #f57c00; }
+        .badge-answer { background: #e8f5e9; color: #388e3c; }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: #999;
+        }
+
+        /* ========== 主内容区（预览编辑区） ========== */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #f8f9fa;
+        }
+
+        .content-header {
+            background: white;
+            padding: 16px 24px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .content-header h2 {
+            font-size: 1.2rem;
+            color: #1a1a2e;
+        }
+
+        .content-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 24px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #ddd;
+            color: #555;
+        }
+
+        .btn-outline:hover {
+            background: #f0f0f0;
+        }
+
+        .btn-danger {
+            background: #fee;
+            color: #e53935;
+            border: 1px solid #ffcdd2;
+        }
+
+        .btn-danger:hover {
+            background: #fdd;
+        }
+
+        .content-editor {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .editor-toolbar {
+            background: white;
+            border-radius: 16px 16px 0 0;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+        }
+
+        .tool-btn {
+            background: none;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            color: #555;
+        }
+
+        .tool-btn:hover {
+            background: #f0f0f0;
+        }
+
+        textarea {
+            width: 100%;
+            height: calc(100vh - 200px);
+            padding: 20px;
+            border: none;
+            font-family: 'Courier New', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            resize: none;
+            background: white;
+            border-radius: 0 0 16px 16px;
+        }
+
+        textarea:focus {
+            outline: none;
+        }
+
+        .preview-mode {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            min-height: calc(100vh - 180px);
+            overflow-y: auto;
+        }
+
+        .preview-mode h1, .preview-mode h2 {
+            margin: 16px 0 12px 0;
+            color: #1a1a2e;
+        }
+
+        .preview-mode h1 { font-size: 1.6rem; border-bottom: 2px solid #667eea; padding-bottom: 8px; }
+        .preview-mode h2 { font-size: 1.3rem; }
+        .preview-mode pre {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 12px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        .preview-mode code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+
+        /* 状态栏 */
+        .status-bar {
+            background: white;
+            padding: 8px 24px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.75rem;
+            color: #6c7a8e;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f0f0f0;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1>📚 学习资料库</h1>
+            <p>笔记 · 复习题 · 答题记录</p>
+        </div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 搜索文件名...">
+        </div>
+        <div class="file-tabs">
+            <button class="file-tab" data-type="note">📝 笔记</button>
+            <button class="file-tab" data-type="quiz">📋 复习题</button>
+            <button class="file-tab" data-type="answer">✍️ 答题记录</button>
+        </div>
+        <div class="file-list" id="fileList">
+            <!-- 动态渲染 -->
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <div class="content-header">
+            <h2 id="currentFileTitle">📄 选择文件</h2>
+            <div class="content-actions">
+                <button class="btn btn-primary" id="newFileBtn">✨ 新建</button>
+                <button class="btn btn-outline" id="editModeBtn" style="display: none;">✏️ 编辑</button>
+                <button class="btn btn-outline" id="saveFileBtn" style="display: none;">💾 保存</button>
+                <button class="btn btn-outline" id="cancelEditBtn" style="display: none;">取消</button>
+                <button class="btn btn-danger" id="deleteFileBtn">🗑️ 删除</button>
+            </div>
+        </div>
+        <div class="content-editor" id="contentEditor">
+            <div class="preview-mode" id="previewMode">
+                <div style="text-align: center; color: #999; padding: 60px;">
+                    📂 从左侧选择一个文件<br>
+                    或点击「新建」创建新文件
+                </div>
+            </div>
+            <div id="editMode" style="display: none;">
+                <div class="editor-toolbar">
+                    <button class="tool-btn" onclick="insertMarkdown('### ')">H3</button>
+                    <button class="tool-btn" onclick="insertMarkdown('## ')">H2</button>
+                    <button class="tool-btn" onclick="insertMarkdown('- ')">列表</button>
+                    <button class="tool-btn" onclick="insertMarkdown('```\n\n```')">代码块</button>
+                </div>
+                <textarea id="editorTextarea" placeholder="输入内容..."></textarea>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span id="fileInfo">未选择文件</span>
+            <span id="charCount">0 字符</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ========== 数据存储 ==========
+    let files = {
+        notes: [],      // { id, name, content, createdAt, updatedAt }
+        quizzes: [],
+        answers: []
+    };
+    
+    let currentType = 'note';      // note / quiz / answer
+    let currentFile = null;         // 当前选中的文件
+    let isEditing = false;
+    let nextId = 1;
+    let searchKeyword = '';
+    
+    // ========== 初始化模拟数据 ==========
+    function initMockData() {
+        files.notes = [
+            {
+                id: nextId++,
+                name: 'Python基础笔记.md',
+                content: `## Python基础
+
+### 变量与数据类型
+Python中的变量不需要声明类型，可以直接赋值。常见数据类型包括：
+- int（整数）
+- float（浮点数）
+- str（字符串）
+- bool（布尔值）
+- list（列表）
+- dict（字典）
+
+### 列表操作
+列表用方括号[]表示，可以存储任意类型元素。常用方法：
+- \`append()\` 在末尾添加元素
+- \`pop()\` 删除并返回指定位置元素
+- \`len()\` 获取长度
+
+### 条件判断
+if-elif-else结构用于条件分支。注意缩进是Python的语法要求。`,
+                createdAt: '2026-05-24 10:30',
+                updatedAt: '2026-05-24 10:30'
+            },
+            {
+                id: nextId++,
+                name: '数据分析笔记.md',
+                content: `## 数据分析
+
+### Pandas基础
+Pandas是Python数据分析核心库。DataFrame是二维表格数据结构。
+
+### 常用方法
+- \`df.head()\` 查看前5行
+- \`df.info()\` 查看数据信息
+- \`df.describe()\` 查看统计信息
+
+### 数据清洗
+- \`dropna()\` 删除缺失行
+- \`fillna()\` 填充缺失值
+- \`drop_duplicates()\` 删除重复值`,
+                createdAt: '2026-05-24 11:00',
+                updatedAt: '2026-05-24 11:00'
+            }
+        ];
+        
+        files.quizzes = [
+            {
+                id: nextId++,
+                name: 'Python基础_复习题.md',
+                content: `# Python基础复习题
+
+## 一、简答题
+
+1. Python中变量声明的特点是什么？
+
+2. 如何在列表末尾添加元素？
+
+3. 获取列表长度使用什么函数？
+
+## 二、代码题
+
+编写一段Python代码，创建一个包含三个元素的列表，并在末尾添加一个新元素。
+
+---
+*请在下方回答，完成后保存为答题记录*`,
+                sourceNoteId: 1,
+                createdAt: '2026-05-24 14:00',
+                updatedAt: '2026-05-24 14:00'
+            }
+        ];
+        
+        files.answers = [
+            {
+                id: nextId++,
+                name: 'Python基础_答题记录_2026-05-24.md',
+                content: `# Python基础答题记录
+
+## 简答题
+
+1. Python中变量声明的特点是什么？
+   > Python中的变量不需要声明类型，可以直接赋值，属于动态类型语言。
+
+2. 如何在列表末尾添加元素？
+   > 使用 append() 方法，例如：\`list.append(element)\`
+
+3. 获取列表长度使用什么函数？
+   > 使用 len() 函数，例如：\`len(list)\`
+
+## 代码题
+
+\`\`\`python
+my_list = [1, 2, 3]
+my_list.append(4)
+print(my_list)  # 输出 [1, 2, 3, 4]
+\`\`\`
+
+---
+批改状态：待批改`,
+                sourceQuizId: 1,
+                createdAt: '2026-05-24 15:30',
+                updatedAt: '2026-05-24 15:30'
+            }
+        ];
+        
+        renderFileList();
+    }
+    
+    // ========== 渲染文件列表 ==========
+    function renderFileList() {
+        const container = document.getElementById('fileList');
+        let fileArray = [];
+        
+        if (currentType === 'note') fileArray = files.notes;
+        else if (currentType === 'quiz') fileArray = files.quizzes;
+        else fileArray = files.answers;
+        
+        // 搜索过滤
+        if (searchKeyword) {
+            fileArray = fileArray.filter(f => f.name.toLowerCase().includes(searchKeyword.toLowerCase()));
+        }
+        
+        if (fileArray.length === 0) {
+            container.innerHTML = `<div class="empty-state">📭 暂无文件<br><small>点击「新建」创建</small></div>`;
+            return;
+        }
+        
+        container.innerHTML = fileArray.map(file => `
+            <div class="file-item ${currentFile?.id === file.id ? 'selected' : ''}" onclick="selectFile(${file.id})">
+                <div class="file-name">${escapeHtml(file.name)}</div>
+                <div class="file-meta">
+                    <span>📅 ${file.updatedAt || file.createdAt}</span>
+                    <span class="file-badge ${getBadgeClass(currentType)}">${getBadgeText(currentType)}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function getBadgeClass(type) {
+        if (type === 'note') return 'badge-note';
+        if (type === 'quiz') return 'badge-quiz';
+        return 'badge-answer';
+    }
+    
+    function getBadgeText(type) {
+        if (type === 'note') return '笔记';
+        if (type === 'quiz') return '复习题';
+        return '答题记录';
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // ========== 选择文件 ==========
+    window.selectFile = function(id) {
+        let fileArray = [];
+        if (currentType === 'note') fileArray = files.notes;
+        else if (currentType === 'quiz') fileArray = files.quizzes;
+        else fileArray = files.answers;
+        
+        currentFile = fileArray.find(f => f.id === id);
+        if (currentFile) {
+            isEditing = false;
+            switchToPreviewMode();
+            renderFileList();
+        }
+    };
+    
+    // 切换到预览模式
+    function switchToPreviewMode() {
+        isEditing = false;
+        document.getElementById('previewMode').style.display = 'block';
+        document.getElementById('editMode').style.display = 'none';
+        document.getElementById('editModeBtn').style.display = 'none';
+        document.getElementById('saveFileBtn').style.display = 'none';
+        document.getElementById('cancelEditBtn').style.display = 'none';
+        document.getElementById('newFileBtn').style.display = 'inline-flex';
+        document.getElementById('deleteFileBtn').style.display = 'inline-flex';
+        document.getElementById('currentFileTitle').innerHTML = `📄 ${currentFile?.name || '选择文件'}`;
+        
+        if (currentFile) {
+            document.getElementById('previewMode').innerHTML = renderMarkdown(currentFile.content);
+            document.getElementById('fileInfo').innerHTML = `📄 ${currentFile.name} | 创建于 ${currentFile.createdAt}`;
+            document.getElementById('charCount').innerHTML = `${currentFile.content.length} 字符`;
+        } else {
+            document.getElementById('previewMode').innerHTML = `<div style="text-align: center; color: #999; padding: 60px;">📂 从左侧选择一个文件<br>或点击「新建」创建新文件</div>`;
+            document.getElementById('fileInfo').innerHTML = '未选择文件';
+            document.getElementById('charCount').innerHTML = '0 字符';
+        }
+    }
+    
+    // 切换到编辑模式
+    function switchToEditMode() {
+        if (!currentFile) {
+            alert('请先选择一个文件');
+            return;
+        }
+        isEditing = true;
+        document.getElementById('previewMode').style.display = 'none';
+        document.getElementById('editMode').style.display = 'block';
+        document.getElementById('editModeBtn').style.display = 'none';
+        document.getElementById('saveFileBtn').style.display = 'inline-flex';
+        document.getElementById('cancelEditBtn').style.display = 'inline-flex';
+        document.getElementById('newFileBtn').style.display = 'none';
+        document.getElementById('deleteFileBtn').style.display = 'inline-flex';
+        
+        const textarea = document.getElementById('editorTextarea');
+        textarea.value = currentFile.content;
+        textarea.focus();
+        updateCharCount();
+    }
+    
+    // 保存文件
+    function saveFile() {
+        if (!currentFile) return;
+        const newContent = document.getElementById('editorTextarea').value;
+        currentFile.content = newContent;
+        currentFile.updatedAt = new Date().toLocaleString();
+        
+        // 更新存储
+        let fileArray;
+        if (currentType === 'note') fileArray = files.notes;
+        else if (currentType === 'quiz') fileArray = files.quizzes;
+        else fileArray = files.answers;
+        
+        const index = fileArray.findIndex(f => f.id === currentFile.id);
+        if (index !== -1) fileArray[index] = currentFile;
+        
+        switchToPreviewMode();
+        renderFileList();
+        alert('✅ 保存成功');
+    }
+    
+    // 新建文件
+    function newFile() {
+        const fileName = prompt('请输入文件名（.md）:', `新${getBadgeText(currentType)}_${new Date().toLocaleDateString()}.md`);
+        if (!fileName) return;
+        
+        const newFile = {
+            id: nextId++,
+            name: fileName,
+            content: `# ${fileName.replace('.md', '')}\n\n## 内容\n\n请在这里输入内容...`,
+            createdAt: new Date().toLocaleString(),
+            updatedAt: new Date().toLocaleString()
+        };
+        
+        if (currentType === 'note') files.notes.unshift(newFile);
+        else if (currentType === 'quiz') files.quizzes.unshift(newFile);
+        else files.answers.unshift(newFile);
+        
+        currentFile = newFile;
+        renderFileList();
+        switchToPreviewMode();
+    }
+    
+    // 删除文件
+    function deleteFile() {
+        if (!currentFile) {
+            alert('请先选择一个文件');
+            return;
+        }
+        if (!confirm(`确定删除 "${currentFile.name}" 吗？`)) return;
+        
+        if (currentType === 'note') {
+            files.notes = files.notes.filter(f => f.id !== currentFile.id);
+        } else if (currentType === 'quiz') {
+            files.quizzes = files.quizzes.filter(f => f.id !== currentFile.id);
+        } else {
+            files.answers = files.answers.filter(f => f.id !== currentFile.id);
+        }
+        
+        currentFile = null;
+        renderFileList();
+        switchToPreviewMode();
+    }
+    
+    // 插入 Markdown 语法
+    window.insertMarkdown = function(syntax) {
+        const textarea = document.getElementById('editorTextarea');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        const newText = text.substring(0, start) + syntax + text.substring(end);
+        textarea.value = newText;
+        textarea.focus();
+        textarea.setSelectionRange(start + syntax.length, start + syntax.length);
+        updateCharCount();
+    };
+    
+    function updateCharCount() {
+        const textarea = document.getElementById('editorTextarea');
+        if (textarea) {
+            document.getElementById('charCount').innerHTML = `${textarea.value.length} 字符`;
+        }
+    }
+    
+    // 简单的 Markdown 渲染
+    function renderMarkdown(content) {
+        let html = content;
+        // 标题
+        html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+        // 代码块
+        html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+        // 行内代码
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // 列表
+        html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
+        html = html.replace(/<li>.*<\/li>/g, match => `<ul>${match}</ul>`);
+        // 引用
+        html = html.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>');
+        // 换行
+        html = html.replace(/\n/g, '<br>');
+        return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">${html}</div>`;
+    }
+    
+    // ========== 事件绑定 ==========
+    document.getElementById('newFileBtn').addEventListener('click', newFile);
+    document.getElementById('editModeBtn').addEventListener('click', switchToEditMode);
+    document.getElementById('saveFileBtn').addEventListener('click', saveFile);
+    document.getElementById('cancelEditBtn').addEventListener('click', switchToPreviewMode);
+    document.getElementById('deleteFileBtn').addEventListener('click', deleteFile);
+    
+    document.getElementById('editorTextarea').addEventListener('input', updateCharCount);
+    
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+        searchKeyword = e.target.value;
+        renderFileList();
+    });
+    
+    document.querySelectorAll('.file-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.file-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentType = tab.dataset.type;
+            currentFile = null;
+            renderFileList();
+            switchToPreviewMode();
+        });
+    });
+    
+    // 激活默认 Tab
+    document.querySelector('.file-tab[data-type="note"]').classList.add('active');
+    
+    // 初始化
+    initMockData();
+</script>
+</body>
+</html>

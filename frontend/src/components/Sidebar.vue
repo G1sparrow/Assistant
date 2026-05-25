@@ -2,15 +2,14 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <div class="app-title">💬 小智助手</div>
-      <div class="new-chat-row">
+      <button class="sidebar-nav-btn" :class="{ active: currentPage === 'library' }" @click="handleToggleLibrary">
+        📚 学习资料库
+      </button>
+      <div class="new-chat-row" v-if="currentPage === 'messages'">
         <button class="btn-primary" @click="handleNew">+ 新对话</button>
-        <select class="model-select" v-model="modelType">
-          <option value="ollama">Ollama</option>
-          <option value="deepseek">DeepSeek</option>
-        </select>
       </div>
     </div>
-    <div class="sidebar-content">
+    <div class="sidebar-content" v-if="currentPage === 'messages'">
       <div class="conversation-list">
         <div
           v-for="conv in conversations"
@@ -25,7 +24,7 @@
         </div>
       </div>
     </div>
-    <div class="sidebar-footer">
+    <div class="sidebar-footer" v-if="currentPage === 'messages'">
       <div class="status-info">
         <div class="status-info-left">
           <span class="status-dot" :class="{ error: !status.online }"></span>
@@ -38,21 +37,30 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
 import { useConversations } from '../composables/useConversations.js'
 import { useChat } from '../composables/useChat.js'
 import { useStatus } from '../composables/useStatus.js'
+import { useMode } from '../composables/useMode.js'
 
 const { conversations, currentId, create, switchTo, remove, formatTime } = useConversations()
 const { loadMessages, clear } = useChat()
 const { status } = useStatus()
+const { currentPage, openLibrary, closeLibrary } = useMode()
 
-const modelType = ref('ollama')
+const modelType = 'ollama'
 
 const emit = defineEmits(['conversation-changed'])
 
+function handleToggleLibrary() {
+  if (currentPage.value === 'library') {
+    closeLibrary()
+  } else {
+    openLibrary()
+  }
+}
+
 async function handleNew() {
-  const id = await create(modelType.value)
+  const id = await create(modelType)
   if (id) {
     clear()
     emit('conversation-changed')

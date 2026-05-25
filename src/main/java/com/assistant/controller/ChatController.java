@@ -107,6 +107,15 @@ public class ChatController {
         return ResponseEntity.ok().build();
     }
 
+    @PutMapping("/api/conversations/{conversationId}/model")
+    @ResponseBody
+    public ResponseEntity<Void> updateModel(
+            @PathVariable Long conversationId,
+            @RequestParam String modelType) {
+        chatService.updateModel(conversationId, modelType);
+        return ResponseEntity.ok().build();
+    }
+
     /**
      * 健康检查
      */

@@ -141,6 +141,18 @@ public class MemoryService {
     }
 
     /**
+     * 更新对话模型类型
+     */
+    @Transactional
+    public void updateConversationModel(Long conversationId, String modelType) {
+        conversationRepository.findById(conversationId).ifPresent(conv -> {
+            conv.setModelType(modelType);
+            conversationRepository.save(conv);
+            log.info("更新对话模型: id={}, modelType={}", conversationId, modelType);
+        });
+    }
+
+    /**
      * 归档对话
      */
     @Transactional
@@ -149,5 +161,24 @@ public class MemoryService {
             conv.setStatus("ARCHIVED");
             conversationRepository.save(conv);
         });
+    }
+
+    @Transactional
+    public ChatMessage saveMessagePlain(Long conversationId, String content, String role) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("对话不存在: " + conversationId));
+
+        ChatMessage message = ChatMessage.builder()
+                .conversation(conversation)
+                .role(role)
+                .content(content)
+                .messageType("text")
+                .build();
+        message = chatMessageRepository.save(message);
+
+        conversation.setUpdatedAt(LocalDateTime.now());
+        conversationRepository.save(conversation);
+
+        return message;
     }
 }

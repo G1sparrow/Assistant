@@ -6,7 +6,7 @@ const messages = ref([])
 const isLoading = ref(false)
 
 export function useChat() {
-  const { create, updateTitle } = useConversations()
+  const { currentId, create, updateTitle } = useConversations()
 
   async function loadMessages(conversationId) {
     try {
@@ -22,6 +22,16 @@ export function useChat() {
 
   function pushMessage(role, content) {
     messages.value.push({ role, content })
+  }
+
+  async function saveMessageToBackend(role, content) {
+    if (currentId.value) {
+      try {
+        await api.saveMessage(currentId.value, role, content)
+      } catch {
+        // silent
+      }
+    }
   }
 
   async function send(conversationId, text) {
@@ -95,6 +105,7 @@ export function useChat() {
     loadMessages,
     clear,
     pushMessage,
+    saveMessageToBackend,
     send
   }
 }

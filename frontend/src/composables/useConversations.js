@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import * as api from '../api/index.js'
 
 const conversations = ref([])
@@ -16,7 +16,7 @@ export function useConversations() {
   async function create(modelType) {
     try {
       const data = await api.createConversation(modelType)
-      const conv = { id: data.conversationId, title: '新对话', updatedAt: new Date().toISOString() }
+      const conv = { id: data.conversationId, title: '新对话', updatedAt: new Date().toISOString(), modelType: modelType || 'ollama' }
       conversations.value.unshift(conv)
       currentId.value = data.conversationId
       return data.conversationId
@@ -41,6 +41,21 @@ export function useConversations() {
       console.error('删除对话失败', e)
     }
   }
+
+  async function updateModel(id, modelType) {
+    try {
+      await api.updateConversationModel(id, modelType)
+      const conv = conversations.value.find(c => c.id === id)
+      if (conv) conv.modelType = modelType
+    } catch (e) {
+      console.error('更新模型失败', e)
+    }
+  }
+
+  const currentModel = computed(() => {
+    const conv = conversations.value.find(c => c.id === currentId.value)
+    return conv?.modelType || 'ollama'
+  })
 
   function formatTime(dateStr) {
     if (!dateStr) return ''
@@ -68,10 +83,12 @@ export function useConversations() {
   return {
     conversations,
     currentId,
+    currentModel,
     load,
     create,
     switchTo,
     remove,
+    updateModel,
     formatTime,
     updateTitle
   }
