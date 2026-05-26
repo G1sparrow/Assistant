@@ -53,6 +53,45 @@ export function useReview() {
     loadState()
   })
 
+  function buildUploadReply(result, sourceLabel) {
+    currentNoteId.value = result.noteId
+    currentQuestions.value = result.questions || []
+    let reply = '✅ 已接收' + sourceLabel
+    if (result.noteId) reply += '（ID: ' + result.noteId + '）'
+    reply += '，生成 **' + result.questionCount + '** 道复习题：\n\n'
+    result.questions.forEach((q, i) => {
+      reply += '**' + (i + 1) + '.** ' + q.question + '  _(' + q.type + ')_\n'
+    })
+    reply += '\n---\n📝 输入 `/review 你的答案` 进行批改\n'
+    reply += '   答案格式：每行以题号开头\n   例：\n   1. 监督学习是...\n   2. 过拟合是...'
+    return reply
+  }
+
+  function buildGradeReply(result) {
+    currentSession.value = result
+    let reply = '📊 **批改完成！**\n\n'
+    reply += '**总分：' + result.totalScore + '/100**\n\n'
+    const details = result.details || []
+    details.forEach((d, i) => {
+      const icon = d.correct ? '✅' : '❌'
+      const color = d.correct ? '' : ' ⚠️'
+      reply += icon + ' 题' + (i + 1) + '：**' + d.score + '分**' + color + '\n'
+      reply += '  💡 ' + (d.feedback || '') + '\n\n'
+    })
+    reply += '---\n📋 输入 `/list` 查看所有笔记'
+    return reply
+  }
+
+  function replaceAssistantMsg(content) {
+    const msgs = [...messages.value]
+    msgs[msgs.length - 1] = { role: 'ASSISTANT', content }
+    messages.value = msgs
+  }
+
+  function removePlaceholder() {
+    messages.value = [...messages.value.slice(0, -1)]
+  }
+
   async function send(role, content) {
     pushMessage(role, content)
     await saveMessageToBackend(role, content)
@@ -61,48 +100,93 @@ export function useReview() {
   async function handleUpload(text) {
     isLoading.value = true
     await send('USER', '/upload ' + text.slice(0, 80) + (text.length > 80 ? '...' : ''))
-    try {
-      const result = await api.uploadNote(text, currentModel.value)
-      if (result.success) {
-        currentNoteId.value = result.noteId
-        currentQuestions.value = result.questions
-        let reply = '✅ 已接收笔记，生成 **' + result.questionCount + '** 道复习题：\n\n'
-        result.questions.forEach((q, i) => {
-          reply += '**' + (i + 1) + '.** ' + q.question + '  _(' + q.type + ')_\n'
-        })
-        reply += '\n---\n📝 输入 `/review 你的答案` 进行批改\n'
-        reply += '   答案格式：每行以题号开头\n   例：\n   1. 监督学习是...\n   2. 过拟合是...'
-        await send('ASSISTANT', reply)
-      } else {
-        await send('ASSISTANT', '❌ 处理失败：' + (result.message || '未知错误'))
+
+    pushMessage('ASSISTANT', '...')
+    let accumulated = ''
+
+    const success = await api.streamUploadNote(text, currentModel.value, {
+      onToken(token) {
+        accumulated += token
+        const msgs = [...messages.value]
+        const last = msgs[msgs.length - 1]
+        msgs[msgs.length - 1] = { ...last, content: accumulated }
+        messages.value = msgs
+      },
+      onDone(data) {
+        try {
+          const result = JSON.parse(data)
+          replaceAssistantMsg(buildUploadReply(result, '笔记'))
+        } catch (e) {
+          replaceAssistantMsg('❌ 解析结果失败：' + e.message)
+        }
+        isLoading.value = false
+      },
+      onError(err) {
+        replaceAssistantMsg('❌ 流式上传失败：' + err)
+        isLoading.value = false
       }
-    } catch (e) {
-      await send('ASSISTANT', '❌ 上传失败：' + e.message)
+    })
+
+    if (!success) {
+      removePlaceholder()
+      try {
+        const result = await api.uploadNote(text, currentModel.value)
+        if (result.success) {
+          await send('ASSISTANT', buildUploadReply(result, '笔记'))
+        } else {
+          await send('ASSISTANT', '❌ 处理失败：' + (result.message || '未知错误'))
+        }
+      } catch (e) {
+        await send('ASSISTANT', '❌ 上传失败：' + e.message)
+      }
+      isLoading.value = false
     }
-    isLoading.value = false
   }
 
   async function handleUploadFile(file) {
     isLoading.value = true
     await send('USER', '/upload (文件: ' + file.name + ')')
-    try {
-      const result = await api.uploadNoteFile(file, currentModel.value)
-      if (result.success) {
-        currentNoteId.value = result.noteId
-        currentQuestions.value = result.questions
-        let reply = '✅ 已接收文件 **' + file.name + '**，生成 **' + result.questionCount + '** 道复习题：\n\n'
-        result.questions.forEach((q, i) => {
-          reply += '**' + (i + 1) + '.** ' + q.question + '  _(' + q.type + ')_\n'
-        })
-        reply += '\n---\n📝 输入 `/review 你的答案` 进行批改'
-        await send('ASSISTANT', reply)
-      } else {
-        await send('ASSISTANT', '❌ 处理失败：' + (result.message || '未知错误'))
+
+    pushMessage('ASSISTANT', '...')
+    let accumulated = ''
+
+    const success = await api.streamUploadNoteFile(file, currentModel.value, {
+      onToken(token) {
+        accumulated += token
+        const msgs = [...messages.value]
+        const last = msgs[msgs.length - 1]
+        msgs[msgs.length - 1] = { ...last, content: accumulated }
+        messages.value = msgs
+      },
+      onDone(data) {
+        try {
+          const result = JSON.parse(data)
+          replaceAssistantMsg(buildUploadReply(result, '文件 **' + file.name + '**'))
+        } catch (e) {
+          replaceAssistantMsg('❌ 解析结果失败：' + e.message)
+        }
+        isLoading.value = false
+      },
+      onError(err) {
+        replaceAssistantMsg('❌ 流式上传失败：' + err)
+        isLoading.value = false
       }
-    } catch (e) {
-      await send('ASSISTANT', '❌ 上传失败：' + e.message)
+    })
+
+    if (!success) {
+      removePlaceholder()
+      try {
+        const result = await api.uploadNoteFile(file, currentModel.value)
+        if (result.success) {
+          await send('ASSISTANT', buildUploadReply(result, '文件 **' + file.name + '**'))
+        } else {
+          await send('ASSISTANT', '❌ 处理失败：' + (result.message || '未知错误'))
+        }
+      } catch (e) {
+        await send('ASSISTANT', '❌ 上传失败：' + e.message)
+      }
+      isLoading.value = false
     }
-    isLoading.value = false
   }
 
   async function handleGrade(text) {
@@ -132,30 +216,46 @@ export function useReview() {
       return
     }
 
-    try {
-      const result = await api.gradeAnswers(currentNoteId.value, answers, currentModel.value)
-      if (result.success) {
-        currentSession.value = result
-        let reply = '📊 **批改完成！**\n\n'
-        reply += '**总分：' + result.totalScore + '/100**\n\n'
+    pushMessage('ASSISTANT', '...')
+    let accumulated = ''
 
-        const details = result.details || []
-        details.forEach((d, i) => {
-          const icon = d.correct ? '✅' : '❌'
-          const color = d.correct ? '' : ' ⚠️'
-          reply += icon + ' 题' + (i + 1) + '：**' + d.score + '分**' + color + '\n'
-          reply += '  💡 ' + (d.feedback || '') + '\n\n'
-        })
-
-        reply += '---\n📋 输入 `/list` 查看所有笔记'
-        await send('ASSISTANT', reply)
-      } else {
-        await send('ASSISTANT', '❌ 批改失败：' + (result.message || '未知错误'))
+    const success = await api.streamGradeAnswers(currentNoteId.value, answers, currentModel.value, {
+      onToken(token) {
+        accumulated += token
+        const msgs = [...messages.value]
+        const last = msgs[msgs.length - 1]
+        msgs[msgs.length - 1] = { ...last, content: accumulated }
+        messages.value = msgs
+      },
+      onDone(data) {
+        try {
+          const result = JSON.parse(data)
+          replaceAssistantMsg(buildGradeReply(result))
+        } catch (e) {
+          replaceAssistantMsg('❌ 解析批改结果失败：' + e.message)
+        }
+        isLoading.value = false
+      },
+      onError(err) {
+        replaceAssistantMsg('❌ 流式批改失败：' + err)
+        isLoading.value = false
       }
-    } catch (e) {
-      await send('ASSISTANT', '❌ 批改失败：' + e.message)
+    })
+
+    if (!success) {
+      removePlaceholder()
+      try {
+        const result = await api.gradeAnswers(currentNoteId.value, answers, currentModel.value)
+        if (result.success) {
+          await send('ASSISTANT', buildGradeReply(result))
+        } else {
+          await send('ASSISTANT', '❌ 批改失败：' + (result.message || '未知错误'))
+        }
+      } catch (e) {
+        await send('ASSISTANT', '❌ 批改失败：' + e.message)
+      }
+      isLoading.value = false
     }
-    isLoading.value = false
   }
 
   async function handleList() {
@@ -187,8 +287,7 @@ export function useReview() {
     reply += '**`/upload`** (不带内容)\n'
     reply += '  弹出文件选择器，上传文档文件\n\n'
     reply += '**`/review`** `<你的答案>`\n'
-    reply += '  批改答案。每行以题号开头：\n'
-    reply += '  1. 答案是...\n  2. 答案是...\n\n'
+    reply += '  批改答案。生成复习报告。\n\n'
     reply += '**`/select`** `<笔记ID>`\n'
     reply += '  选择已有笔记进行批改（用 `/list` 查看ID）\n\n'
     reply += '**`/list`**\n'

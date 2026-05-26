@@ -48,6 +48,8 @@ async function handleFile(e) {
 }
 
 function showToast(msg, type) {
+  const existing = document.getElementById('toast')
+  if (existing) existing.remove()
   const bg = type === 'success' ? '#22c55e' : '#ef4444'
   const el = document.createElement('div')
   el.id = 'toast'

@@ -1,7 +1,7 @@
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="app-title">💬 小智助手</div>
+      <div class="app-title">💬 学习助手</div>
       <button class="sidebar-nav-btn" :class="{ active: currentPage === 'library' }" @click="handleToggleLibrary">
         📚 学习资料库
       </button>

@@ -10,13 +10,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +35,8 @@ public class ReviewService {
     private final ReviewSessionRepository sessionRepository;
     private final ChatModel ollamaChatModel;
     private final ChatModel deepseekChatModel;
+    private final StreamingChatModel ollamaStreamingChatModel;
+    private final StreamingChatModel deepseekStreamingChatModel;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ReviewService(
@@ -38,12 +44,16 @@ public class ReviewService {
             ReviewQuestionRepository questionRepository,
             ReviewSessionRepository sessionRepository,
             @Qualifier("ollamaChatModel") ChatModel ollamaChatModel,
-            @Qualifier("deepseekChatModel") ChatModel deepseekChatModel) {
+            @Qualifier("deepseekChatModel") ChatModel deepseekChatModel,
+            @Qualifier("ollamaStreamingChatModel") StreamingChatModel ollamaStreamingChatModel,
+            @Qualifier("deepseekStreamingChatModel") StreamingChatModel deepseekStreamingChatModel) {
         this.noteRepository = noteRepository;
         this.questionRepository = questionRepository;
         this.sessionRepository = sessionRepository;
         this.ollamaChatModel = ollamaChatModel;
         this.deepseekChatModel = deepseekChatModel;
+        this.ollamaStreamingChatModel = ollamaStreamingChatModel;
+        this.deepseekStreamingChatModel = deepseekStreamingChatModel;
     }
 
     private static final String GENERATE_PROMPT_TEMPLATE = """
@@ -145,6 +155,7 @@ public class ReviewService {
 
     @Transactional
     public Map<String, Object> gradeAnswers(Long noteId, Map<Integer, String> answers, String modelType) {
+        log.info("用户提交答案 [noteId={}, model={}, 题数={}]", noteId, modelType, answers.size());
         List<ReviewQuestion> questions = questionRepository.findByNoteId(noteId);
         if (questions.isEmpty()) {
             throw new IllegalArgumentException("未找到该笔记的复习题: " + noteId);
@@ -178,6 +189,7 @@ public class ReviewService {
                 .messages(List.of(UserMessage.from(prompt)))
                 .build());
         String llmResponse = response.aiMessage().text();
+        log.info("AI 批改结果 [noteId={}, model={}]: length={}", noteId, modelType, llmResponse.length());
         List<Map<String, Object>> gradingResults = parseGradingResult(llmResponse, questions.size());
 
         int totalScore = 0;
@@ -200,6 +212,8 @@ public class ReviewService {
                 .build();
         sessionRepository.save(session);
 
+        log.info("批改完成 [noteId={}, 总分={}/100, sessionId={}]", noteId, totalScore, session.getId());
+
         Map<String, Object> result = new HashMap<>();
         result.put("sessionId", session.getId());
         result.put("totalScore", totalScore);
@@ -208,6 +222,230 @@ public class ReviewService {
         result.put("questionCount", questions.size());
 
         return result;
+    }
+
+    public void streamGradeAnswers(Long noteId, Map<Integer, String> answers, String modelType, SseEmitter emitter) {
+        log.info("流式批改开始 [noteId={}, model={}, 题数={}]", noteId, modelType, answers.size());
+
+        List<ReviewQuestion> questions;
+        try {
+            questions = questionRepository.findByNoteId(noteId);
+            if (questions.isEmpty()) {
+                emitter.send(SseEmitter.event().name("error").data("未找到该笔记的复习题: " + noteId));
+                emitter.complete();
+                return;
+            }
+        } catch (Exception e) {
+            try {
+                emitter.send(SseEmitter.event().name("error").data("查询失败: " + e.getMessage()));
+                emitter.complete();
+            } catch (IOException ex) {}
+            return;
+        }
+
+        StringBuilder qaBuilder = new StringBuilder();
+        for (int i = 0; i < questions.size(); i++) {
+            ReviewQuestion q = questions.get(i);
+            String userAnswer = answers.getOrDefault(i, "");
+            qaBuilder.append("题").append(i + 1).append(": ").append(q.getQuestionText()).append("\n");
+            qaBuilder.append("  标准答案: ").append(q.getCorrectAnswer()).append("\n");
+            qaBuilder.append("  用户答案: ").append(userAnswer).append("\n\n");
+        }
+
+        int perScore = 100 / questions.size();
+        int remainder = 100 % questions.size();
+        List<Integer> scoreMap = new ArrayList<>();
+        for (int i = 0; i < questions.size(); i++) {
+            scoreMap.add(perScore + (i < remainder ? 1 : 0));
+        }
+
+        String prompt = String.format(GRADE_PROMPT_TEMPLATE, questions.size(), qaBuilder.toString());
+        String extra = "各题满分: ";
+        for (int i = 0; i < scoreMap.size(); i++) {
+            extra += "题" + (i + 1) + "=" + scoreMap.get(i) + "分" + (i < scoreMap.size() - 1 ? ", " : "");
+        }
+        prompt += "\n" + extra;
+
+        StreamingChatModel model = selectStreamingModel(modelType);
+        StringBuilder fullResponse = new StringBuilder();
+
+        model.chat(
+                ChatRequest.builder()
+                        .messages(List.of(UserMessage.from(prompt)))
+                        .build(),
+                new StreamingChatResponseHandler() {
+                    @Override
+                    public void onPartialResponse(String partialResponse) {
+                        fullResponse.append(partialResponse);
+                        try {
+                            emitter.send(SseEmitter.event().name("token").data(partialResponse));
+                        } catch (IOException e) {
+                            log.error("SSE token send failed", e);
+                        }
+                    }
+
+                    @Override
+                    public void onCompleteResponse(ChatResponse completeResponse) {
+                        String llmResponse = fullResponse.toString();
+                        log.info("AI 流式批改完成 [noteId={}, model={}]: length={}", noteId, modelType, llmResponse.length());
+
+                        List<Map<String, Object>> gradingResults = parseGradingResult(llmResponse, questions.size());
+                        int totalScore = 0;
+                        for (var g : gradingResults) {
+                            totalScore += ((Number) g.getOrDefault("score", 0)).intValue();
+                        }
+
+                        Map<String, Object> feedbackMap = new HashMap<>();
+                        feedbackMap.put("grading", gradingResults);
+                        feedbackMap.put("scoreMap", scoreMap);
+                        String feedbackJson = toJsonString(feedbackMap);
+                        String answersJson = toJsonString(answers);
+
+                        ReviewSession session = ReviewSession.builder()
+                                .noteId(noteId)
+                                .answersJson(answersJson)
+                                .totalScore(totalScore)
+                                .feedbackJson(feedbackJson)
+                                .build();
+                        sessionRepository.save(session);
+
+                        log.info("流式批改完成 [noteId={}, 总分={}/100, sessionId={}]", noteId, totalScore, session.getId());
+
+                        try {
+                            Map<String, Object> result = new HashMap<>();
+                            result.put("sessionId", session.getId());
+                            result.put("totalScore", totalScore);
+                            result.put("maxScore", 100);
+                            result.put("details", gradingResults);
+                            result.put("questionCount", questions.size());
+                            String resultJson = objectMapper.writeValueAsString(result);
+                            emitter.send(SseEmitter.event().name("done").data(resultJson));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            log.error("SSE complete send failed", e);
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        log.error("流式批改 LLM 调用失败 [noteId={}, model={}]", noteId, modelType, error);
+                        try {
+                            emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            log.error("SSE error send failed", e);
+                        }
+                    }
+                }
+        );
+    }
+
+    @Transactional
+    public void streamUploadNote(String content, String fileName, String modelType, SseEmitter emitter) {
+        log.info("流式上传笔记 [length={}, model={}]", content.length(), modelType);
+
+        String title = generateTitle(content);
+        ReviewNote note = ReviewNote.builder()
+                .title(title)
+                .content(content)
+                .filePath(fileName)
+                .questionCount(0)
+                .build();
+        note = noteRepository.save(note);
+        Long noteId = note.getId();
+
+        streamGenerateQuestions(content, noteId, modelType, emitter);
+    }
+
+    public void streamGenerateQuestions(String content, Long noteId, String modelType, SseEmitter emitter) {
+        log.info("流式出题开始 [noteId={}, length={}, model={}]", noteId, content.length(), modelType);
+
+        String prompt = String.format(GENERATE_PROMPT_TEMPLATE, content);
+        StreamingChatModel model = selectStreamingModel(modelType);
+        StringBuilder fullResponse = new StringBuilder();
+
+        model.chat(
+                ChatRequest.builder()
+                        .messages(List.of(UserMessage.from(prompt)))
+                        .build(),
+                new StreamingChatResponseHandler() {
+                    @Override
+                    public void onPartialResponse(String partialResponse) {
+                        fullResponse.append(partialResponse);
+                        try {
+                            emitter.send(SseEmitter.event().name("token").data(partialResponse));
+                        } catch (IOException e) {
+                            log.error("SSE token send failed", e);
+                        }
+                    }
+
+                    @Override
+                    public void onCompleteResponse(ChatResponse completeResponse) {
+                        String llmResponse = fullResponse.toString();
+                        log.info("AI 流式出题完成 [noteId={}, model={}]: length={}", noteId, modelType, llmResponse.length());
+
+                        List<ReviewQuestion> questions;
+                        try {
+                            List<Map<String, Object>> parsed = parseQuestionResult(llmResponse);
+                            questions = new ArrayList<>();
+                            for (Map<String, Object> qm : parsed) {
+                                ReviewQuestion q = ReviewQuestion.builder()
+                                        .noteId(noteId)
+                                        .questionText((String) qm.getOrDefault("question", ""))
+                                        .correctAnswer((String) qm.getOrDefault("correctAnswer", ""))
+                                        .questionType((String) qm.getOrDefault("type", "识记型"))
+                                        .category((String) qm.getOrDefault("category", ""))
+                                        .build();
+                                questions.add(questionRepository.save(q));
+                            }
+                        } catch (Exception e) {
+                            log.warn("流式出题解析失败 [noteId={}]", noteId, e);
+                            questions = List.of();
+                        }
+
+                        // update question count
+                        ReviewNote note = noteRepository.findById(noteId).orElse(null);
+                        if (note != null) {
+                            note.setQuestionCount(questions.size());
+                            noteRepository.save(note);
+                        }
+
+                        try {
+                            Map<String, Object> result = new HashMap<>();
+                            result.put("noteId", noteId);
+                            result.put("questionCount", questions.size());
+
+                            List<Map<String, Object>> questionList = new ArrayList<>();
+                            for (int i = 0; i < questions.size(); i++) {
+                                ReviewQuestion q = questions.get(i);
+                                Map<String, Object> qm = new HashMap<>();
+                                qm.put("index", i);
+                                qm.put("question", q.getQuestionText());
+                                qm.put("type", q.getQuestionType());
+                                questionList.add(qm);
+                            }
+                            result.put("questions", questionList);
+
+                            String resultJson = objectMapper.writeValueAsString(result);
+                            emitter.send(SseEmitter.event().name("done").data(resultJson));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            log.error("SSE complete send failed", e);
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        log.error("流式出题 LLM 调用失败 [noteId={}, model={}]", noteId, modelType, error);
+                        try {
+                            emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            log.error("SSE error send failed", e);
+                        }
+                    }
+                }
+        );
     }
 
     public List<Map<String, Object>> listNotes() {
@@ -232,14 +470,14 @@ public class ReviewService {
         List<ReviewSession> sessions = sessionRepository.findByNoteIdOrderByCreatedAtDesc(noteId);
 
         Map<String, Object> result = new HashMap<>();
-        result.put("note", Map.of(
-                "id", note.getId(),
-                "title", note.getTitle(),
-                "content", note.getContent(),
-                "category", note.getCategory(),
-                "questionCount", note.getQuestionCount(),
-                "createdAt", note.getCreatedAt()
-        ));
+        Map<String, Object> noteMap = new HashMap<>();
+        noteMap.put("id", note.getId());
+        noteMap.put("title", note.getTitle() != null ? note.getTitle() : "");
+        noteMap.put("content", note.getContent() != null ? note.getContent() : "");
+        noteMap.put("category", note.getCategory() != null ? note.getCategory() : "");
+        noteMap.put("questionCount", note.getQuestionCount());
+        noteMap.put("createdAt", note.getCreatedAt());
+        result.put("note", noteMap);
 
         List<Map<String, Object>> questionList = new ArrayList<>();
         for (ReviewQuestion q : questions) {
@@ -284,13 +522,22 @@ public class ReviewService {
         };
     }
 
+    private StreamingChatModel selectStreamingModel(String modelType) {
+        return switch (modelType != null ? modelType.toLowerCase() : "") {
+            case "deepseek" -> deepseekStreamingChatModel;
+            default -> ollamaStreamingChatModel;
+        };
+    }
+
     private List<ReviewQuestion> generateQuestions(String content, Long noteId, String modelType) {
+        log.info("用户笔记 [noteId={}, length={}, model={}]", noteId, content.length(), modelType);
         String prompt = String.format(GENERATE_PROMPT_TEMPLATE, content);
         ChatModel model = selectModel(modelType);
         ChatResponse response = model.chat(ChatRequest.builder()
                 .messages(List.of(UserMessage.from(prompt)))
                 .build());
         String llmResponse = response.aiMessage().text();
+        log.info("AI 出题结果 [noteId={}, model={}]: return length={}", noteId, modelType, llmResponse.length());
 
         List<Map<String, Object>> parsed = parseQuestionResult(llmResponse);
         List<ReviewQuestion> questions = new ArrayList<>();
@@ -345,23 +592,24 @@ public class ReviewService {
 
     private String extractJson(String text) {
         text = text.trim();
+        // strip markdown code fences
         if (text.startsWith("```")) {
-            int start = text.indexOf('\n');
-            int end = text.lastIndexOf("```");
-            if (start > 0 && end > start) {
-                text = text.substring(start, end).trim();
+            int firstNewline = text.indexOf('\n');
+            int lastFence = text.lastIndexOf("```");
+            if (firstNewline > 0 && lastFence > firstNewline) {
+                text = text.substring(firstNewline, lastFence).trim();
             }
         }
-        if (text.startsWith("[")) {
-            int end = text.lastIndexOf(']');
-            if (end > 0) {
-                text = text.substring(0, end + 1);
-            }
+        // find the outermost JSON array
+        int start = text.indexOf('[');
+        int end = text.lastIndexOf(']');
+        if (start >= 0 && end > start) {
+            text = text.substring(start, end + 1);
         }
         // repair missing commas between JSON array elements
-        text = text.replaceAll("\\}(\\s*)\\n(\\s*)\\{", "},$1\n$2{");
-        text = text.replaceAll("\\](\\s*)\\n(\\s*)\\[", "],$1\n$2[");
-        text = text.replaceAll("\"(\\s*)\\n(\\s*)\"", "\",$1\n$2\"");
+        text = text.replaceAll("\\}\\s*\\{", "},{");
+        text = text.replaceAll("\\]\\s*\\[", "],[");
+        text = text.replaceAll("\"\\s*\n\\s*\"", "\",\"");
         return text;
     }
 

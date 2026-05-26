@@ -40,15 +40,11 @@ public class AssistantTools {
     public String calculate(@P("数学表达式，例如 '2 + 3 * 4'") String expression) {
         log.debug("Tool: calculate -> {}", expression);
         try {
-            // 使用 Java 脚本引擎执行计算
-            javax.script.ScriptEngineManager manager = new javax.script.ScriptEngineManager();
-            javax.script.ScriptEngine engine = manager.getEngineByName("JavaScript");
-            if (engine == null) {
-                // 如果 JavaScript 引擎不可用，使用简单的手动解析
-                return evaluateSimpleExpression(expression);
+            double result = evaluate(expression);
+            if (result == (long) result) {
+                return String.valueOf((long) result);
             }
-            Object result = engine.eval(expression);
-            return String.valueOf(result);
+            return String.format("%.2f", result);
         } catch (Exception e) {
             log.warn("计算失败: {}", e.getMessage());
             return "计算错误: " + e.getMessage();
@@ -70,26 +66,71 @@ public class AssistantTools {
     @Tool("统计一段文本的字数和字符数")
     public String countTextStats(@P("要统计的文本") String text) {
         log.debug("Tool: countTextStats");
+        String[] words = text.split("[\\s\\p{Punct}，。！？、；：\"\"''（）【】《》]+");
+        int wordCount = 0;
+        for (String w : words) {
+            if (!w.isEmpty()) wordCount++;
+        }
         return String.format("字数: %d, 字符数(含空格): %d, 字符数(不含空格): %d",
-                text.length(),
+                wordCount,
                 text.length(),
                 text.replace(" ", "").length());
     }
 
     /**
-     * 简易表达式求值 (JS引擎不可用时的后备方案)
+     * 递归下降表达式求值 — 支持 + - * / ( ) 和数字
      */
-    private String evaluateSimpleExpression(String expression) {
-        expression = expression.trim().replaceAll("\\s+", "");
-        try {
-            // 仅支持简单的 + - * / 运算
-            if (expression.matches("[0-9+\\-*/().]+")) {
-                // 使用递归下降或简单的表达式解析
-                return "表达式格式支持: 请确保使用正确的数学表达式";
-            }
-            return "不支持的表达式格式";
-        } catch (Exception e) {
-            return "计算错误: " + e.getMessage();
+    private static class Parser {
+        private final String input;
+        private int pos;
+
+        Parser(String input) {
+            this.input = input.replace(" ", "");
+            this.pos = 0;
         }
+
+        double parse() {
+            double result = parseTerm();
+            while (pos < input.length()) {
+                char c = input.charAt(pos);
+                if (c == '+') { pos++; result += parseTerm(); }
+                else if (c == '-') { pos++; result -= parseTerm(); }
+                else break;
+            }
+            return result;
+        }
+
+        double parseTerm() {
+            double result = parseFactor();
+            while (pos < input.length()) {
+                char c = input.charAt(pos);
+                if (c == '*') { pos++; result *= parseFactor(); }
+                else if (c == '/') { pos++; result /= parseFactor(); }
+                else break;
+            }
+            return result;
+        }
+
+        double parseFactor() {
+            char c = input.charAt(pos);
+            if (c == '(') {
+                pos++;
+                double result = parse();
+                if (pos < input.length() && input.charAt(pos) == ')') pos++;
+                return result;
+            }
+            if (c == '-' || c == '+') {
+                int sign = c == '-' ? -1 : 1;
+                pos++;
+                return sign * parseFactor();
+            }
+            int start = pos;
+            while (pos < input.length() && (Character.isDigit(input.charAt(pos)) || input.charAt(pos) == '.')) pos++;
+            return Double.parseDouble(input.substring(start, pos));
+        }
+    }
+
+    private double evaluate(String expr) {
+        return new Parser(expr).parse();
     }
 }

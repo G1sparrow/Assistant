@@ -1,6 +1,5 @@
 <template>
   <div class="chat-header">
-    <span class="chat-header-title">{{ title }}</span>
     <div class="chat-header-status">
       <span class="status-item">
         <span class="status-item-dot" :class="ragClass"></span>
@@ -22,11 +21,6 @@ import { useStatus } from '../composables/useStatus.js'
 const { conversations, currentId } = useConversations()
 const { status } = useStatus()
 
-const title = computed(() => {
-  if (!currentId.value) return '桌面助手'
-  const c = conversations.value.find(c => c.id === currentId.value)
-  return c ? c.title : '桌面助手'
-})
 
 const ragClass = computed(() => {
   return status.rag?.enabled ? 'green' : 'gray'

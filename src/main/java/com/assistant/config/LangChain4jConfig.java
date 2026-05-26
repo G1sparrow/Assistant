@@ -13,6 +13,7 @@ import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
+import dev.langchain4j.service.tool.ToolProvider;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
@@ -137,42 +138,50 @@ public class LangChain4jConfig {
     @Bean(name = "ollamaAssistantAiService")
     public AssistantAiService ollamaAssistantAiService(
             @Qualifier("ollamaChatModel") ChatModel chatModel,
-            AssistantTools tools) {
+            AssistantTools tools,
+            ToolProvider mcpToolProvider) {
         log.info("构建 Ollama AiService");
         return AiServices.builder(AssistantAiService.class)
                 .chatModel(chatModel)
                 .tools(tools)
+                .toolProvider(mcpToolProvider)
                 .build();
     }
 
     @Bean(name = "deepseekAssistantAiService")
     public AssistantAiService deepseekAssistantAiService(
             @Qualifier("deepseekChatModel") ChatModel chatModel,
-            AssistantTools tools) {
+            AssistantTools tools,
+            ToolProvider mcpToolProvider) {
         log.info("构建 DeepSeek AiService");
         return AiServices.builder(AssistantAiService.class)
                 .chatModel(chatModel)
                 .tools(tools)
+                .toolProvider(mcpToolProvider)
                 .build();
     }
 
     @Bean(name = "ollamaStreamingAssistantAiService")
     public StreamingAssistantAiService ollamaStreamingAssistantAiService(
             @Qualifier("ollamaStreamingChatModel") StreamingChatModel streamingChatModel,
-            AssistantTools tools) {
+            AssistantTools tools,
+            ToolProvider mcpToolProvider) {
         return AiServices.builder(StreamingAssistantAiService.class)
                 .streamingChatModel(streamingChatModel)
                 .tools(tools)
+                .toolProvider(mcpToolProvider)
                 .build();
     }
 
     @Bean(name = "deepseekStreamingAssistantAiService")
     public StreamingAssistantAiService deepseekStreamingAssistantAiService(
             @Qualifier("deepseekStreamingChatModel") StreamingChatModel streamingChatModel,
-            AssistantTools tools) {
+            AssistantTools tools,
+            ToolProvider mcpToolProvider) {
         return AiServices.builder(StreamingAssistantAiService.class)
                 .streamingChatModel(streamingChatModel)
                 .tools(tools)
+                .toolProvider(mcpToolProvider)
                 .build();
     }
 }

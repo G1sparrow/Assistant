@@ -2,6 +2,9 @@ package com.assistant.repository;
 
 import com.assistant.entity.ChatMessage;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -18,4 +21,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
      * 查找某对话最近的N条消息
      */
     List<ChatMessage> findByConversationIdOrderByCreatedAtDesc(Long conversationId);
+
+    @Modifying
+    @Query("DELETE FROM ChatMessage m WHERE m.conversation.id = :conversationId")
+    int deleteByConversationId(@Param("conversationId") Long conversationId);
 }

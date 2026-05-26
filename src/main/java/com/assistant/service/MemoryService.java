@@ -116,8 +116,8 @@ public class MemoryService {
     public List<ChatMessage> getRecentMessages(Long conversationId, int limit) {
         List<ChatMessage> messages = chatMessageRepository
                 .findByConversationIdOrderByCreatedAtDesc(conversationId);
-        int toIndex = Math.min(limit, messages.size());
-        return messages.subList(0, toIndex);
+        int fromIndex = Math.max(0, messages.size() - limit);
+        return messages.subList(fromIndex, messages.size());
     }
 
     /**
@@ -136,6 +136,7 @@ public class MemoryService {
      */
     @Transactional
     public void deleteConversation(Long conversationId) {
+        chatMessageRepository.deleteByConversationId(conversationId);
         conversationRepository.deleteById(conversationId);
         log.info("删除对话: id={}", conversationId);
     }

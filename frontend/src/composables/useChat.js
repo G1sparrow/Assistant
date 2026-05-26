@@ -45,16 +45,13 @@ export function useChat() {
     pushMessage('USER', text)
     isLoading.value = true
 
+    pushMessage('ASSISTANT', '...')
     let fullText = ''
     let toolCalls = []
 
     const success = await api.streamChat(cid, text, {
       onToken(token) {
         fullText += token
-        if (fullText === token) {
-          pushMessage('ASSISTANT', '')
-        }
-        // 创建新对象引用，强制 Vue 检测到 prop 变化并重渲染子组件
         const msgs = [...messages.value]
         const last = msgs[msgs.length - 1]
         msgs[msgs.length - 1] = { ...last, content: fullText }
@@ -78,13 +75,15 @@ export function useChat() {
         isLoading.value = false
       },
       onError(err) {
-        pushMessage('ASSISTANT', '抱歉，发生错误: ' + err)
+        const msgs = [...messages.value]
+        msgs[msgs.length - 1] = { role: 'ASSISTANT', content: '抱歉，发生错误: ' + err }
+        messages.value = msgs
         isLoading.value = false
       }
     })
 
     if (!success) {
-      // fallback to non-streaming
+      messages.value = [...messages.value.slice(0, -1)]
       try {
         const res = await api.sendMessage(cid, text)
         pushMessage('ASSISTANT', res.message)

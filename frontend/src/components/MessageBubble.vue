@@ -23,7 +23,7 @@ const props = defineProps({
 })
 
 const isUser = computed(() => props.message.role === 'USER')
-const isStreaming = computed(() => !isUser.value && props.message.content === '')
+const isStreaming = computed(() => !isUser.value && (props.message.content === '' || props.message.content === '...'))
 
 const rendered = computed(() => {
   if (!props.message.content) return ''

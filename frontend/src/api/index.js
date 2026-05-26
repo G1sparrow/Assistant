@@ -157,7 +157,166 @@ export async function streamChat(conversationId, text, callbacks) {
             return true
           case 'error':
             if (onError) onError(data)
+            return false
+        }
+      }
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function streamGradeAnswers(noteId, answers, modelType, callbacks) {
+  const { onToken, onDone, onError } = callbacks
+  try {
+    const res = await fetch(BASE + '/review/grade/stream?noteId=' + noteId + '&model=' + (modelType || 'ollama'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers })
+    })
+    if (!res.ok) return false
+    if (!res.body) return false
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        let eventType = ''
+        let data = ''
+        for (const line of lines) {
+          if (line.startsWith('event:')) eventType = line.slice(6)
+          else if (line.startsWith('data:')) data = line.slice(5)
+        }
+        if (!eventType && !data) continue
+
+        switch (eventType) {
+          case 'token':
+            if (onToken) onToken(data)
+            break
+          case 'done':
+            if (onDone) onDone(data)
             return true
+          case 'error':
+            if (onError) onError(data)
+            return false
+        }
+      }
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function streamUploadNote(content, modelType, callbacks) {
+  const { onToken, onDone, onError } = callbacks
+  try {
+    const params = new URLSearchParams({ content, model: modelType || 'ollama' })
+    const res = await fetch(BASE + '/review/upload/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    })
+    if (!res.ok) return false
+    if (!res.body) return false
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        let eventType = ''
+        let data = ''
+        for (const line of lines) {
+          if (line.startsWith('event:')) eventType = line.slice(6)
+          else if (line.startsWith('data:')) data = line.slice(5)
+        }
+        if (!eventType && !data) continue
+
+        switch (eventType) {
+          case 'token':
+            if (onToken) onToken(data)
+            break
+          case 'done':
+            if (onDone) onDone(data)
+            return true
+          case 'error':
+            if (onError) onError(data)
+            return false
+        }
+      }
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function streamUploadNoteFile(file, modelType, callbacks) {
+  const { onToken, onDone, onError } = callbacks
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('model', modelType || 'ollama')
+    const res = await fetch(BASE + '/review/upload/stream', {
+      method: 'POST',
+      body: formData
+    })
+    if (!res.ok) return false
+    if (!res.body) return false
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        let eventType = ''
+        let data = ''
+        for (const line of lines) {
+          if (line.startsWith('event:')) eventType = line.slice(6)
+          else if (line.startsWith('data:')) data = line.slice(5)
+        }
+        if (!eventType && !data) continue
+
+        switch (eventType) {
+          case 'token':
+            if (onToken) onToken(data)
+            break
+          case 'done':
+            if (onDone) onDone(data)
+            return true
+          case 'error':
+            if (onError) onError(data)
+            return false
         }
       }
     }
